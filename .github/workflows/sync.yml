@@ -1,0 +1,33 @@
+name: Sync Grist → MySQL
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # tous les jours à 6h UTC
+  workflow_dispatch: # permet de lancer manuellement depuis GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Lancer la sync
+        env:
+          GRIST_API_KEY: ${{ secrets.GRIST_API_KEY }}
+          GRIST_DOC_ID: ${{ secrets.GRIST_DOC_ID }}
+          GRIST_SERVER: ${{ secrets.GRIST_SERVER }}
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+          TABLES_TO_SYNC: ${{ secrets.TABLES_TO_SYNC }}
+        run: python sync.py
