@@ -19,11 +19,7 @@ MYSQL_MAX_IDENTIFIER = 64
 
 def _safe_col_name(name: str) -> str:
     """Tronque un nom de colonne à 64 caractères (limite MySQL)."""
-    if len(name) <= MYSQL_MAX_IDENTIFIER:
-        return name
-    truncated = name[:MYSQL_MAX_IDENTIFIER]
-    logger.warning("Colonne tronquée : '%s' → '%s'", name, truncated)
-    return truncated
+    return name[:MYSQL_MAX_IDENTIFIER]
 
 
 # ------------------------------------------------------------------ #
