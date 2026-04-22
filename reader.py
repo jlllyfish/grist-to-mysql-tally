@@ -5,6 +5,7 @@ Lecture et filtrage des tables, colonnes et records d'un document Grist source.
 
 import logging
 from dataclasses import dataclass, field
+
 from grist_client import GristClient
 
 logger = logging.getLogger(__name__)
@@ -17,30 +18,29 @@ EXCLUDED_TABLE_PREFIXES = ("_grist_",)
 
 EXCLUDED_COLUMNS = {"manualSort", "id"}
 EXCLUDED_COLUMN_PREFIXES = ("gristHelper_",)
+EXCLUDED_COLUMN_TYPES = {"Attachments"}
 
 
 def _is_user_table(table: dict) -> bool:
     tid = table["id"]
-    hidden = table.get("fields", {}).get("tableRef", None)  # isHidden via rawViewSectionRef absent = visible
-    # Grist expose "isHidden" directement dans certaines versions
     is_hidden = table.get("isHidden", False)
-    return (
-        not is_hidden
-        and not any(tid.startswith(p) for p in EXCLUDED_TABLE_PREFIXES)
-    )
+    return not is_hidden and not any(tid.startswith(p) for p in EXCLUDED_TABLE_PREFIXES)
 
 
 def _is_user_column(col: dict) -> bool:
     cid = col["id"]
+    ctype = col.get("fields", {}).get("type", "")
     return (
         cid not in EXCLUDED_COLUMNS
         and not any(cid.startswith(p) for p in EXCLUDED_COLUMN_PREFIXES)
+        and ctype not in EXCLUDED_COLUMN_TYPES
     )
 
 
 # ------------------------------------------------------------------ #
 # Structures de données                                                #
 # ------------------------------------------------------------------ #
+
 
 @dataclass
 class ColumnInfo:
@@ -76,6 +76,7 @@ class TableInfo:
 # Reader                                                               #
 # ------------------------------------------------------------------ #
 
+
 class GristReader:
     def __init__(self, client: GristClient):
         self.client = client
@@ -89,7 +90,9 @@ class GristReader:
         excluded = len(all_tables) - len(user_tables)
         logger.info(
             "Tables : %d total, %d utilisateur, %d exclues",
-            len(all_tables), len(user_tables), excluded,
+            len(all_tables),
+            len(user_tables),
+            excluded,
         )
         return user_tables
 
@@ -101,7 +104,9 @@ class GristReader:
         user_cols = [c for c in all_cols if _is_user_column(c)]
         logger.debug(
             "Table %s : %d colonnes total, %d utilisateur",
-            table_id, len(all_cols), len(user_cols),
+            table_id,
+            len(all_cols),
+            len(user_cols),
         )
         return [self._parse_column(c) for c in user_cols]
 
@@ -152,11 +157,13 @@ class GristReader:
             columns = self.get_user_columns(tid)
             records = self.get_records(tid, columns) if include_records else []
 
-            result.append(TableInfo(
-                id=tid,
-                label=label,
-                columns=columns,
-                records=records,
-            ))
+            result.append(
+                TableInfo(
+                    id=tid,
+                    label=label,
+                    columns=columns,
+                    records=records,
+                )
+            )
 
         return result
