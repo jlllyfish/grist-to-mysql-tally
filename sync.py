@@ -24,8 +24,10 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 
 KEY_COLUMNS: dict[str, str] = {
-    # "Clients":   "email",
-    # "Produits":  "code_produit",
+    "Tally_old": "submission_id",
+    "Retours_Tally_new": "submission_id",
+    "Users_instance_dev": "id_bdd",
+    "Formulaire_contact_OTP": "Email",
 }
 
 
