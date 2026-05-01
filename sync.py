@@ -7,13 +7,15 @@ import logging
 import sys
 from dataclasses import dataclass, field
 
-from config import Config
-from grist_client import GristClient
-from mapper import cast_value
-from mysql_writer import _safe_col_name, create_mysql_engine
-from reader import GristReader
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+
+from config import Config
+from grist_client import GristClient
+from reader import GristReader
+from mysql_writer import create_mysql_engine
+from mapper import cast_value
+from mysql_writer import _safe_col_name
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +24,14 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 
 KEY_COLUMNS: dict[str, str] = {
-    "Tally_old": "submission_id",
-    "Retours_Tally_new": "submission_id",
-    "Users_instance_dev": "id_bdd",
-    "Formulaire_contact_OTP": "Email",
+    # "Clients":   "email",
+    # "Produits":  "code_produit",
 }
 
 
 # ------------------------------------------------------------------ #
 # Rapport                                                              #
 # ------------------------------------------------------------------ #
-
 
 @dataclass
 class TableSyncResult:
@@ -50,14 +49,10 @@ class TableSyncResult:
     def log(self):
         status = "✅" if self.success else "❌"
         parts = []
-        if self.inserted:
-            parts.append(f"🟢 +{self.inserted} insérés")
-        if self.updated:
-            parts.append(f"🔵 ~{self.updated} modifiés")
-        if self.deleted:
-            parts.append(f"🔴 -{self.deleted} supprimés")
-        if self.skipped:
-            parts.append(f"⚪ ={self.skipped} inchangés")
+        if self.inserted: parts.append(f"🟢 +{self.inserted} insérés")
+        if self.updated:  parts.append(f"🔵 ~{self.updated} modifiés")
+        if self.deleted:  parts.append(f"🔴 -{self.deleted} supprimés")
+        if self.skipped:  parts.append(f"⚪ ={self.skipped} inchangés")
         summary = "  ".join(parts) if parts else "⚪ aucun changement"
         logger.info("%s  %-30s  %s", status, self.table_id, summary)
         for err in self.errors:
@@ -89,7 +84,6 @@ class SyncReport:
 # Syncer                                                               #
 # ------------------------------------------------------------------ #
 
-
 class GristMySQLSyncer:
     CHUNK_SIZE = 500
 
@@ -103,16 +97,13 @@ class GristMySQLSyncer:
 
         tables = (
             [t for t in all_tables if t.id in tables_to_sync]
-            if tables_to_sync
-            else all_tables
+            if tables_to_sync else all_tables
         )
 
         for table in tables:
             key_col = KEY_COLUMNS.get(table.id)
             if not key_col:
-                logger.warning(
-                    "Table %s ignorée : aucune clé dans KEY_COLUMNS", table.id
-                )
+                logger.warning("Table %s ignorée : aucune clé dans KEY_COLUMNS", table.id)
                 continue
             result = self._sync_table(table, key_col)
             report.results.append(result)
@@ -148,11 +139,7 @@ class GristMySQLSyncer:
         # Charger tous les champs cible pour comparaison
         try:
             with self.engine.connect() as conn:
-                all_rows = (
-                    conn.execute(text(f"SELECT * FROM `{table.id}`"))
-                    .mappings()
-                    .fetchall()
-                )
+                all_rows = conn.execute(text(f"SELECT * FROM `{table.id}`")).mappings().fetchall()
             target_fields_by_grist_id = {row["grist_id"]: dict(row) for row in all_rows}
         except SQLAlchemyError as e:
             result.errors.append(f"Lecture champs MySQL échouée : {e}")
@@ -168,12 +155,7 @@ class GristMySQLSyncer:
             else:
                 grist_id = src_rec["id"]
                 tgt = target_fields_by_grist_id.get(grist_id, {})
-                diff = {
-                    k: v
-                    for k, v in fields.items()
-                    if str(tgt.get(k, "")) != str(v)
-                    if v is not None
-                }
+                diff = {k: v for k, v in fields.items() if str(tgt.get(k, "")) != str(v) if v is not None}
                 if diff:
                     to_update.append({"grist_id": grist_id, **diff})
                 else:
@@ -199,13 +181,11 @@ class GristMySQLSyncer:
 
             if to_update:
                 try:
-                    cols = [c for c in to_update[0].keys() if c != "grist_id"]
-                    set_str = ", ".join(f"`{c}` = :{c}" for c in cols)
-                    sql = (
-                        f"UPDATE `{table.id}` SET {set_str} WHERE grist_id = :grist_id"
-                    )
-                    for chunk in self._chunks(to_update):
-                        conn.execute(text(sql), chunk)
+                    for rec in to_update:
+                        cols = [c for c in rec.keys() if c != "grist_id"]
+                        set_str = ", ".join(f"`{c}` = :{c}" for c in cols)
+                        sql = f"UPDATE `{table.id}` SET {set_str} WHERE grist_id = :grist_id"
+                        conn.execute(text(sql), rec)
                     result.updated = len(to_update)
                 except SQLAlchemyError as e:
                     result.errors.append(f"Update échoué : {e}")
@@ -214,9 +194,7 @@ class GristMySQLSyncer:
                 try:
                     for chunk in self._chunks(to_delete):
                         ids = ", ".join(str(i) for i in chunk)
-                        conn.execute(
-                            text(f"DELETE FROM `{table.id}` WHERE grist_id IN ({ids})")
-                        )
+                        conn.execute(text(f"DELETE FROM `{table.id}` WHERE grist_id IN ({ids})"))
                     result.deleted = len(to_delete)
                 except SQLAlchemyError as e:
                     result.errors.append(f"Delete échoué : {e}")
@@ -227,13 +205,12 @@ class GristMySQLSyncer:
     def _chunks(self, items, size=None):
         size = size or self.CHUNK_SIZE
         for i in range(0, len(items), size):
-            yield items[i : i + size]
+            yield items[i: i + size]
 
 
 # ------------------------------------------------------------------ #
 # Point d'entrée                                                       #
 # ------------------------------------------------------------------ #
-
 
 def main():
     if not KEY_COLUMNS:
