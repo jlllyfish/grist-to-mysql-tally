@@ -21,55 +21,66 @@ def get_records(table):
     return r.json()["records"]
 
 
-def delete_all(table):
-    records = get_records(table)
-    ids = [r["id"] for r in records]
-    if ids:
-        r = requests.post(
-            f"{GRIST_URL}/docs/{DOC_ID}/tables/{table}/data/delete",
-            json=ids,
-            headers=headers,
-        )
-        r.raise_for_status()
-        print(f"{len(ids)} lignes supprimées dans {table}")
-
-
-def insert_records(table, records):
+def add_records(table, records):
     r = requests.post(
         f"{GRIST_URL}/docs/{DOC_ID}/tables/{table}/records",
         json={"records": records},
         headers=headers,
     )
     r.raise_for_status()
-    print(f"{len(records)} lignes insérées dans {table}")
+    print(f"{len(records)} lignes ajoutées dans {table}")
+
+
+def delete_records(table, ids):
+    r = requests.post(
+        f"{GRIST_URL}/docs/{DOC_ID}/tables/{table}/data/delete",
+        json=ids,
+        headers=headers,
+    )
+    r.raise_for_status()
+    print(f"{len(ids)} lignes supprimées dans {table}")
 
 
 # 1. Lire Tableau_recap_stage
 rows = get_records("Tableau_recap_stage")
-print(rows[43]["fields"])  # debug
 
-# 2. Éclater la colonne Public
-publics = []
+# 2. Calculer l'état cible (id_stage, public)
+cible = []
 for row in rows:
     id_stage = row["id"]
     valeurs = row["fields"].get("Public", "") or ""
     for val in valeurs.split(","):
         val = val.strip()
         if val:
-            publics.append({"fields": {"id_stage": id_stage, "public": val}})
-            if id_stage in [44, 45, 46, 47, 48, 49]:
-                print(f"Ajouté : {id_stage} -> {repr(val)}")
+            cible.append((id_stage, val))
 
-# DEBUT DEBUG
-for p in publics:
-    print(p["fields"]["id_stage"], p["fields"]["public"])
-# FIN DEBUG
+cible_set = set(cible)
 
-print(f"{len(publics)} entrées éclatées")
+# 3. Lire l'état actuel de Publics
+existants = get_records("Publics")
+existant_index = {}  # (id_stage, public) -> grist_id
+for rec in existants:
+    key = (rec["fields"].get("id_stage"), rec["fields"].get("public"))
+    existant_index[key] = rec["id"]
 
-# 3. Vider Publics
-delete_all("Publics")
+existant_set = set(existant_index.keys())
 
-# 4. Réinsérer
-if publics:
-    insert_records("Publics", publics)
+# 4. Calculer les différences
+a_ajouter = cible_set - existant_set
+a_supprimer = existant_set - cible_set
+
+print(
+    f"À ajouter : {len(a_ajouter)}, à supprimer : {len(a_supprimer)}, inchangés : {len(cible_set & existant_set)}"
+)
+
+# 5. Supprimer les obsolètes
+if a_supprimer:
+    ids_a_supprimer = [existant_index[key] for key in a_supprimer]
+    delete_records("Publics", ids_a_supprimer)
+
+# 6. Ajouter les nouveaux
+if a_ajouter:
+    records = [
+        {"fields": {"id_stage": id_stage, "public": pub}} for id_stage, pub in a_ajouter
+    ]
+    add_records("Publics", records)
