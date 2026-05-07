@@ -2,8 +2,8 @@ name: Sync Grist → MySQL
 
 on:
   schedule:
-    - cron: "0 6 * * *" # tous les jours à 6h UTC
-  workflow_dispatch: # permet de lancer manuellement depuis GitHub
+    - cron: "0 6 * * *"
+  workflow_dispatch:
 
 jobs:
   sync:
@@ -19,15 +19,24 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r requirements.txt
 
-      - name: Lancer la sync
+      - name: Éclater les publics dans Grist
         env:
           GRIST_API_KEY: ${{ secrets.GRIST_API_KEY }}
-          GRIST_DOC_ID: ${{ secrets.GRIST_DOC_ID }}
           GRIST_SERVER: ${{ secrets.GRIST_SERVER }}
+          GRIST_DOC_2_ID: ${{ secrets.GRIST_DOC_2_ID }}
+        run: python sync_publics.py
+
+      - name: Lancer la sync Grist → MySQL
+        env:
+          GRIST_API_KEY: ${{ secrets.GRIST_API_KEY }}
+          GRIST_SERVER: ${{ secrets.GRIST_SERVER }}
+          GRIST_DOC_1_ID: ${{ secrets.GRIST_DOC_1_ID }}
+          GRIST_DOC_1_TABLES: ${{ secrets.GRIST_DOC_1_TABLES }}
+          GRIST_DOC_2_ID: ${{ secrets.GRIST_DOC_2_ID }}
+          GRIST_DOC_2_TABLES: ${{ secrets.GRIST_DOC_2_TABLES }}
           MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
           MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
           MYSQL_USER: ${{ secrets.MYSQL_USER }}
           MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
           MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
-          TABLES_TO_SYNC: ${{ secrets.TABLES_TO_SYNC }}
         run: python sync.py
