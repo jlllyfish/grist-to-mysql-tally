@@ -28,8 +28,6 @@ KEY_COLUMNS: dict[str, str] = {
     "Retours_Tally_new": "submission_id",
     "Users_instance_dev": "id_bdd",
     "Formulaire_contact_OTP": "Email",
-    "Tableau_recap_stage": "id_stage",
-    "Publics": "UUID",
 }
 
 
